@@ -1,9 +1,51 @@
-import 'package:cheetah_flutter/cheetah_error.dart';
+import 'package:dart_openai/dart_openai.dart';
 import 'package:flutter/material.dart';
-import 'package:liveprotector/cheetah_manager.dart';
+import 'package:liveprotector/llm_provider.dart';
+import 'package:liveprotector/transcription_provider.dart';
+import 'package:provider/provider.dart';
 
 void main() {
-  runApp(const MainApp());
+  final String modelPath = "assets/cheetah_model.pv";
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create:
+              (_) => TranscriptionProvider(
+                modelPath: modelPath,
+              ),
+        ),
+        ChangeNotifierProxyProvider<TranscriptionProvider, LLMProvider>(
+          update: (context, transcriptionProvider, llmProvider) { 
+            llmProvider!.verifyNewChunkOfConversation(transcriptionProvider.transcriptText);
+            return llmProvider;
+          },
+          create: (BuildContext context) => LLMProvider(
+            baseUrl: "http://127.0.0.1:1234/v1", 
+            systemMessage: "Your function is to identify scams and phishing attempts happening per phone."
+              "You are to protect employee from voice scammers, phishing attempts as voice phishing."
+              "The scenario presented to you may be very diverse, and not all conversations have malicious content in them."
+              "All the messages you receive are transcripts from conversations that happen in real time."
+              "You will receive each chunk of conversation as jons's."
+              "If you have to reason to believe one of the interlocutors in this conversation has poor intentions, as in if you are facing a scamming or phishing attempt,"
+              "generate me the json output of the following: "
+              "{"
+              "'warning': true, "
+              "'reason: 'your reason'"
+              "}."
+              "In 'reason', you have to put the reason why you think this is a scam. It has to be a short sentence as to why and what sort of attack it might be."
+              "If you don't see anything dangerous or suspicious in the whole conversation, then just generate this instead"
+              "{"
+              "'warning': false, "
+              "'reason: '"
+              "}."
+            ) 
+        )
+      ],
+      child: MainApp(),
+    ),
+  );
 }
 
 class MainApp extends StatelessWidget {
@@ -11,7 +53,7 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(home: Scaffold(body: Page()));
+    return MaterialApp(home: Scaffold(body: Page()));
   }
 }
 
@@ -23,159 +65,46 @@ class Page extends StatefulWidget {
 }
 
 class _PageState extends State<Page> {
-  final String accessKey = "50WHnPbczPX1+I+gdvYEO2btOBkTcwDYaWRY6v+ANjqs1YbbgyOigg==";
-  final String modelPath = "assets/cheetah_model.pv";
-
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  bool isError = false;
-  String errorMessage = "";
-
-  bool isProcessing = false;
-  String transcriptText = "";
-  CheetahManager? _cheetahManager;
 
   final ScrollController _controller = ScrollController();
 
-  @override
-  void initState() {
-    super.initState();
-    setState(() {
-      transcriptText = "";
-    });
-
-    initCheetah();
-  }
-
-  Future<void> initCheetah() async {
-    final String modelPath = "assets/cheetah_model.pv";
-
-    try {
-      _cheetahManager = await CheetahManager.create(
-        accessKey,
-        modelPath,
-        transcriptCallback,
-        errorCallback,
-      );
-    } on CheetahActivationException {
-      errorCallback(CheetahActivationException("AccessKey activation error."));
-    } on CheetahActivationLimitException {
-      errorCallback(
-        CheetahActivationLimitException("AccessKey reached its device limit."),
-      );
-    } on CheetahActivationRefusedException {
-      errorCallback(CheetahActivationRefusedException("AccessKey refused."));
-    } on CheetahActivationThrottledException {
-      errorCallback(
-        CheetahActivationThrottledException("AccessKey has been throttled."),
-      );
-    } on CheetahException catch (ex) {
-      errorCallback(ex);
-    }
-  }
-
-  void transcriptCallback(String transcript) {
-    bool shouldScroll =
-        _controller.position.pixels == _controller.position.maxScrollExtent;
-
-    setState(() {
-      transcriptText = transcriptText + transcript;
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (shouldScroll && !_controller.position.atEdge) {
-        _controller.jumpTo(_controller.position.maxScrollExtent);
-      }
-    });
-  }
-
-  void errorCallback(CheetahException error) {
-    setState(() {
-      isError = true;
-      errorMessage = error.message!;
-    });
-  }
-
-  Future<void> _startProcessing() async {
-    if (isProcessing) {
-      return;
-    }
-
-    try {
-      await _cheetahManager!.startProcess();
-      setState(() {
-        transcriptText = "";
-        isProcessing = true;
-      });
-    } on CheetahException catch (ex) {
-      errorCallback(ex);
-    }
-  }
-
-  Future<void> _stopProcessing() async {
-    if (!isProcessing) {
-      return;
-    }
-
-    try {
-      await _cheetahManager!.stopProcess();
-      setState(() {
-        isProcessing = false;
-      });
-    } on CheetahException catch (ex) {
-      errorCallback(ex);
-    }
-  }
-
-  Color picoBlue = Color.fromRGBO(55, 125, 255, 1);
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
         key: _scaffoldKey,
-        appBar: AppBar(
-          title: const Text('Live Detector: COM643'),
-          backgroundColor: picoBlue,
-        ),
-        body: Column(
-          children: [
-            buildCheetahTextArea(context),
-            buildErrorMessage(context),
-            buildStartButton(context),
-          ],
+        appBar: AppBar(title: const Text('Live Detector: COM643')),
+        body: SafeArea(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              buildCheetahTextArea(context),
+              buildErrorMessage(context),
+              buildStartButton(context),
+            ],
+          ),
         ),
       ),
     );
   }
 
   buildStartButton(BuildContext context) {
-    final ButtonStyle buttonStyle = ElevatedButton.styleFrom(
-      backgroundColor: picoBlue,
-      shape: CircleBorder(),
-      textStyle: TextStyle(color: Colors.white),
-    );
-
-    return Expanded(
-      flex: 2,
-      child: Container(
-        child: SizedBox(
-          width: 130,
-          height: 130,
-          child: ElevatedButton(
-            style: buttonStyle,
-            onPressed:
-                isError
-                    ? null
-                    : isProcessing
-                    ? _stopProcessing
-                    : _startProcessing,
-            child: Text(
-              isProcessing ? "Stop" : "Start",
-              style: TextStyle(fontSize: 30),
-            ),
+    return Consumer<TranscriptionProvider>(
+      builder: (context, provider, child) {
+        return IconButton.outlined(
+          color: Theme.of(context).primaryColor,
+          iconSize: 32,
+          onPressed: () => provider.error != null
+            ? null
+            : provider.isProcessing
+            ? provider.stopProcessing()
+            : provider.startProcessing(),
+          icon: Icon(
+            provider.isProcessing ? Icons.mic_sharp : Icons.mic_off_sharp,
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -184,7 +113,10 @@ class _PageState extends State<Page> {
       flex: 6,
       child: Container(
         alignment: Alignment.topCenter,
-        color: Color(0xff25187e),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: Theme.of(context).primaryColor,
+        ),
         margin: EdgeInsets.all(10),
         child: SingleChildScrollView(
           controller: _controller,
@@ -193,10 +125,16 @@ class _PageState extends State<Page> {
           physics: RangeMaintainingScrollPhysics(),
           child: Align(
             alignment: Alignment.topLeft,
-            child: Text(
-              transcriptText,
-              textAlign: TextAlign.left,
-              style: TextStyle(color: Colors.white, fontSize: 20),
+            child: Consumer<TranscriptionProvider>(
+              builder: (context, provider, child) {
+                return Text(
+                  provider.transcriptText,
+                  textAlign: TextAlign.left,
+                  style: Theme.of(context).textTheme.bodyLarge!.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimary,
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -205,27 +143,32 @@ class _PageState extends State<Page> {
   }
 
   buildErrorMessage(BuildContext context) {
-    return Expanded(
-      flex: isError ? 2 : 0,
-      child: Container(
-        alignment: Alignment.center,
-        margin: EdgeInsets.only(left: 20, right: 20),
-        padding: EdgeInsets.all(5),
-        decoration:
-            !isError
-                ? null
-                : BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-        child:
-            !isError
-                ? null
-                : Text(
-                  errorMessage,
-                  style: TextStyle(color: Colors.white, fontSize: 18),
-                ),
-      ),
+    return Selector<TranscriptionProvider, Exception?>(
+      selector: (_, provider) => provider.error,
+      builder: (context, error, child) {
+        return Expanded(
+          flex: error != null ? 2 : 0,
+          child: Container(
+            alignment: Alignment.center,
+            margin: EdgeInsets.only(left: 20, right: 20),
+            padding: EdgeInsets.all(5),
+            decoration:
+                error == null
+                    ? null
+                    : BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+            child:
+                error == null
+                    ? null
+                    : Text(
+                      error.toString(),
+                      style: TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+          ),
+        );
+      },
     );
   }
 }
