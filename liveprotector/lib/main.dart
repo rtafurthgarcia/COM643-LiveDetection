@@ -1,4 +1,3 @@
-import 'package:dart_openai/dart_openai.dart';
 import 'package:flutter/material.dart';
 import 'package:liveprotector/llm_provider.dart';
 import 'package:liveprotector/transcription_provider.dart';
@@ -18,11 +17,11 @@ void main() {
         ),
         ChangeNotifierProxyProvider<TranscriptionProvider, LLMProvider>(
           update: (context, transcriptionProvider, llmProvider) { 
-            llmProvider!.verifyNewChunkOfConversation(transcriptionProvider.transcriptText);
+            llmProvider!.verifyTranscript(transcriptionProvider.transcriptText);
             return llmProvider;
           },
           create: (BuildContext context) => LLMProvider(
-            baseUrl: "http://127.0.0.1:1234/v1", 
+            baseUrl: "http://10.26.74.55:1234/v1", 
             systemMessage: "Your function is to identify scams and phishing attempts happening per phone."
               "You are to protect employee from voice scammers, phishing attempts as voice phishing."
               "The scenario presented to you may be very diverse, and not all conversations have malicious content in them."
@@ -79,6 +78,7 @@ class _PageState extends State<Page> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              buildRunningAnalysisCard(context),
               buildCheetahTextArea(context),
               buildErrorMessage(context),
               buildStartButton(context),
@@ -89,19 +89,57 @@ class _PageState extends State<Page> {
     );
   }
 
+  buildRunningAnalysisCard(BuildContext context) {
+    return Consumer2<TranscriptionProvider, LLMProvider>(
+      builder: (context, transcriptionProvider, llmProvider, child) {
+        return Card(
+          color: llmProvider.warningTriggered ? 
+            Theme.of(context).colorScheme.onError : 
+            Theme.of(context).cardColor,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              llmProvider.warningTriggered ? ListTile(
+                textColor: Theme.of(context).colorScheme.onErrorContainer,
+                tileColor: Theme.of(context).colorScheme.onErrorContainer,
+                leading: const Icon(Icons.warning_amber),
+                title: Text('THIS CALL HAS BEEN IDENTIFIED AS DANGEROUS. HANG UP NOW'),
+                subtitle: Text(llmProvider.warningMessage ?? 'NO REASON HAS BEEN GIVEN FOR THE DANGEROSITY OF THIS CALL.'),
+              ) : ListTile(
+                leading: Icon(transcriptionProvider.isProcessing ? Icons.shield : Icons.mic_off),
+                title: Text(transcriptionProvider.isProcessing ? 'Your call is being analysed and protected in real-time.' : 'No running conversation.'),
+                subtitle: Text(transcriptionProvider.isProcessing ? 'Your conversations are analysed on-premise only.' : 'No data is being collected right now.'),
+              ),
+              transcriptionProvider.isProcessing 
+              && llmProvider.warningTriggered ? Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: <Widget>[
+                  TextButton(
+                    child: const Text('END THE CALL NOW'),
+                    onPressed: () => transcriptionProvider.stopProcessing()
+                  ),
+                ],
+              ) : SizedBox.shrink(),
+            ],
+          ),
+        );
+      }
+    );
+  }
+
   buildStartButton(BuildContext context) {
     return Consumer<TranscriptionProvider>(
       builder: (context, provider, child) {
         return IconButton.outlined(
           color: Theme.of(context).primaryColor,
           iconSize: 32,
-          onPressed: () => provider.error != null
+          onPressed: () => provider.exception != null
             ? null
             : provider.isProcessing
             ? provider.stopProcessing()
             : provider.startProcessing(),
           icon: Icon(
-            provider.isProcessing ? Icons.mic_sharp : Icons.mic_off_sharp,
+            provider.isProcessing ? Icons.call : Icons.call_end,
           ),
         );
       },
@@ -117,7 +155,7 @@ class _PageState extends State<Page> {
           borderRadius: BorderRadius.circular(16),
           color: Theme.of(context).primaryColor,
         ),
-        margin: EdgeInsets.all(10),
+        margin: EdgeInsets.all(4.0),
         child: SingleChildScrollView(
           controller: _controller,
           scrollDirection: Axis.vertical,
@@ -144,7 +182,7 @@ class _PageState extends State<Page> {
 
   buildErrorMessage(BuildContext context) {
     return Selector<TranscriptionProvider, Exception?>(
-      selector: (_, provider) => provider.error,
+      selector: (_, provider) => provider.exception,
       builder: (context, error, child) {
         return Expanded(
           flex: error != null ? 2 : 0,

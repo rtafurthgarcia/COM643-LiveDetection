@@ -10,8 +10,8 @@ class TranscriptionProvider with ChangeNotifier {
 
   final String _modelPath;
 
-  Exception? _error;
-  Exception? get error => _error;
+  Exception? _exception;
+  Exception? get exception => _exception;
 
   bool _isProcessing = false;
   bool get isProcessing => _isProcessing;
@@ -51,7 +51,7 @@ class TranscriptionProvider with ChangeNotifier {
   }
 
   void _errorCallback(CheetahException error) {
-    _error = error;
+    _exception = error;
     notifyListeners();
   }
 
