@@ -1,8 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:liveprotector/bit_of_conversation.dart';
-import 'package:collection/collection.dart';
 import 'package:liveprotector/warning_message.dart';
 import 'package:openai_dart/openai_dart.dart';
 
@@ -41,7 +39,6 @@ class LLMProvider with ChangeNotifier {
       content: systemMessage,
     );
   }
-
 
   void verifyTranscript(String conversation) async {
     // We don't want to overload the server so we only send requests every X amount of words

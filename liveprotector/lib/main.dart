@@ -82,6 +82,7 @@ class _PageState extends State<Page> {
               buildCheetahTextArea(context),
               buildErrorMessage(context),
               buildStartButton(context),
+
             ],
           ),
         ),
@@ -93,17 +94,17 @@ class _PageState extends State<Page> {
     return Consumer2<TranscriptionProvider, LLMProvider>(
       builder: (context, transcriptionProvider, llmProvider, child) {
         return Card(
-          color: llmProvider.warningTriggered ? 
-            Theme.of(context).colorScheme.onError : 
-            Theme.of(context).cardColor,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               llmProvider.warningTriggered ? ListTile(
-                textColor: Theme.of(context).colorScheme.onErrorContainer,
-                tileColor: Theme.of(context).colorScheme.onErrorContainer,
-                leading: const Icon(Icons.warning_amber),
-                title: Text('THIS CALL HAS BEEN IDENTIFIED AS DANGEROUS. HANG UP NOW'),
+                textColor: Theme.of(context).colorScheme.onError,
+                tileColor: Theme.of(context).colorScheme.error,
+                leading: Icon(
+                  Icons.warning_amber,
+                  color: Theme.of(context).colorScheme.onError
+                ),
+                title: Text('THIS CALL HAS BEEN IDENTIFIED AS DANGEROUS. HANG UP NOW!'),
                 subtitle: Text(llmProvider.warningMessage ?? 'NO REASON HAS BEEN GIVEN FOR THE DANGEROSITY OF THIS CALL.'),
               ) : ListTile(
                 leading: Icon(transcriptionProvider.isProcessing ? Icons.shield : Icons.mic_off),
@@ -115,7 +116,12 @@ class _PageState extends State<Page> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
                   TextButton(
-                    child: const Text('END THE CALL NOW'),
+                    child: Text(
+                      'END THE CALL NOW',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.error
+                      )
+                    ),
                     onPressed: () => transcriptionProvider.stopProcessing()
                   ),
                 ],
