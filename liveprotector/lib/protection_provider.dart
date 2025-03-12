@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:liveprotector/warning_message.dart';
 import 'package:openai_dart/openai_dart.dart';
 
-class LLMProvider with ChangeNotifier {
+class ProtectionProvider with ChangeNotifier {
   Exception? _exception;
   Exception? get exception => _exception;
 
@@ -23,7 +23,7 @@ class LLMProvider with ChangeNotifier {
 
   int _wordCountSinceLastProcessing = 0;
 
-  LLMProvider(
+  ProtectionProvider(
     { this.model = "gemma-2-2b-it",
     required String baseUrl, 
     required String systemMessage, 
@@ -43,7 +43,11 @@ class LLMProvider with ChangeNotifier {
   void verifyTranscript(String conversation) async {
     // We don't want to overload the server so we only send requests every X amount of words
     final wordCount = conversation.split(' ').length;
-    if (wordCount - _wordCountSinceLastProcessing < wordThresholdBeforeProcessing) {
+    if ((wordCount - _wordCountSinceLastProcessing).abs() > wordThresholdBeforeProcessing) {
+      if (wordCount == 0) {
+        reset();
+      }
+      
       return;
     } else {
       _wordCountSinceLastProcessing = wordCount;
@@ -98,8 +102,11 @@ class LLMProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void clearException() {
+  void reset() {
     _exception = null;
+    _warningMessage = "";
+    _warningTriggered = false;
+    _wordCountSinceLastProcessing = 0;
     notifyListeners();
   }
 }

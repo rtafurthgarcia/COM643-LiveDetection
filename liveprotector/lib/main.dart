@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:liveprotector/llm_provider.dart';
+import 'package:liveprotector/protection_provider.dart';
 import 'package:liveprotector/transcription_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -15,12 +15,12 @@ void main() {
                 modelPath: modelPath,
               ),
         ),
-        ChangeNotifierProxyProvider<TranscriptionProvider, LLMProvider>(
-          update: (context, transcriptionProvider, llmProvider) { 
-            llmProvider!.verifyTranscript(transcriptionProvider.transcriptText);
-            return llmProvider;
+        ChangeNotifierProxyProvider<TranscriptionProvider, ProtectionProvider>(
+          update: (context, transcriptionProvider, protectionProvider) { 
+            protectionProvider!.verifyTranscript(transcriptionProvider.transcriptText);
+            return protectionProvider;
           },
-          create: (BuildContext context) => LLMProvider(
+          create: (BuildContext context) => ProtectionProvider(
             baseUrl: "http://10.26.74.55:1234/v1", 
             systemMessage: "Your function is to identify scams and phishing attempts happening per phone."
               "You are to protect employee from voice scammers, phishing attempts as voice phishing."
@@ -91,13 +91,13 @@ class _PageState extends State<Page> {
   }
 
   buildRunningAnalysisCard(BuildContext context) {
-    return Consumer2<TranscriptionProvider, LLMProvider>(
-      builder: (context, transcriptionProvider, llmProvider, child) {
+    return Consumer2<TranscriptionProvider, ProtectionProvider>(
+      builder: (context, transcriptionProvider, protectionProvider, child) {
         return Card(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              llmProvider.warningTriggered ? ListTile(
+              protectionProvider.warningTriggered ? ListTile(
                 textColor: Theme.of(context).colorScheme.onError,
                 tileColor: Theme.of(context).colorScheme.error,
                 leading: Icon(
@@ -105,14 +105,14 @@ class _PageState extends State<Page> {
                   color: Theme.of(context).colorScheme.onError
                 ),
                 title: Text('THIS CALL HAS BEEN IDENTIFIED AS DANGEROUS. HANG UP NOW!'),
-                subtitle: Text(llmProvider.warningMessage ?? 'NO REASON HAS BEEN GIVEN FOR THE DANGEROSITY OF THIS CALL.'),
+                subtitle: Text(protectionProvider.warningMessage ?? 'NO REASON HAS BEEN GIVEN FOR THE DANGEROSITY OF THIS CALL.'),
               ) : ListTile(
                 leading: Icon(transcriptionProvider.isProcessing ? Icons.shield : Icons.mic_off),
                 title: Text(transcriptionProvider.isProcessing ? 'Your call is being analysed and protected in real-time.' : 'No running conversation.'),
                 subtitle: Text(transcriptionProvider.isProcessing ? 'Your conversations are analysed on-premise only.' : 'No data is being collected right now.'),
               ),
               transcriptionProvider.isProcessing 
-              && llmProvider.warningTriggered ? Row(
+              && protectionProvider.warningTriggered ? Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
                   TextButton(
