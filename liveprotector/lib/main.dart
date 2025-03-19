@@ -1,10 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:liveprotector/protection_provider.dart';
+import 'package:liveprotector/settings_provider.dart';
 import 'package:liveprotector/transcription_provider.dart';
 import 'package:provider/provider.dart';
 
 void main() {
   final String modelPath = "assets/cheetah_model.pv";
+  final String systemMessage = "Your function is to identify scams and phishing attempts happening per phone."
+    "You are to protect employee from voice scammers, phishing attempts as voice phishing."
+    "The scenario presented to you may be very diverse, and not all conversations have malicious content in them."
+    "All the messages you receive are transcripts from conversations that happen in real time."
+    "You will receive each chunk of conversation as jons's."
+    "If you have to reason to believe one of the interlocutors in this conversation has poor intentions, as in if you are facing a scamming or phishing attempt,"
+    "generate me the json output of the following: "
+    "{"
+    "'warning': true, "
+    "'reason: 'your reason'"
+    "}."
+    "In 'reason', you have to put the reason why you think this is a scam. It has to be a short sentence as to why and what sort of attack it might be."
+    "If you don't see anything dangerous or suspicious in the whole conversation, then just generate this instead"
+    "{"
+    "'warning': false, "
+    "'reason: '"
+    "}.";
 
   runApp(
     MultiProvider(
@@ -15,31 +33,16 @@ void main() {
                 modelPath: modelPath,
               ),
         ),
-        ChangeNotifierProxyProvider<TranscriptionProvider, ProtectionProvider>(
-          update: (context, transcriptionProvider, protectionProvider) { 
-            protectionProvider!.verifyTranscript(transcriptionProvider.transcriptText);
-            return protectionProvider;
-          },
-          create: (BuildContext context) => ProtectionProvider(
-            baseUrl: "http://10.26.74.55:1234/v1", 
-            systemMessage: "Your function is to identify scams and phishing attempts happening per phone."
-              "You are to protect employee from voice scammers, phishing attempts as voice phishing."
-              "The scenario presented to you may be very diverse, and not all conversations have malicious content in them."
-              "All the messages you receive are transcripts from conversations that happen in real time."
-              "You will receive each chunk of conversation as jons's."
-              "If you have to reason to believe one of the interlocutors in this conversation has poor intentions, as in if you are facing a scamming or phishing attempt,"
-              "generate me the json output of the following: "
-              "{"
-              "'warning': true, "
-              "'reason: 'your reason'"
-              "}."
-              "In 'reason', you have to put the reason why you think this is a scam. It has to be a short sentence as to why and what sort of attack it might be."
-              "If you don't see anything dangerous or suspicious in the whole conversation, then just generate this instead"
-              "{"
-              "'warning': false, "
-              "'reason: '"
-              "}."
-            ) 
+        ChangeNotifierProvider(create: (context) => SettingsProvider()),
+        ChangeNotifierProxyProvider<SettingsProvider, ProtectionProvider>(
+          create: (context) => ProtectionProvider(
+            baseUrl: "http://localhost:1234/v1", 
+            systemMessage: systemMessage
+          ),
+          update: (context, settingsProvider, protectionProvider) => ProtectionProvider(
+            baseUrl: settingsProvider.baseUrl, 
+            systemMessage: systemMessage
+          )
         )
       ],
       child: MainApp(),
@@ -65,15 +68,32 @@ class Page extends StatefulWidget {
 
 class _PageState extends State<Page> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
+  final TextEditingController _baseUrlTextFieldController = TextEditingController();
+  final TextEditingController _transcriptTextFieldController = TextEditingController();
   final ScrollController _controller = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+
+    _transcriptTextFieldController.addListener(() {
+      ProtectionProvider provider = Provider.of<ProtectionProvider>(context, listen: false);
+      provider.verifyTranscript(_transcriptTextFieldController.text);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
         key: _scaffoldKey,
-        appBar: AppBar(title: const Text('Live Detector: COM643')),
+        appBar: AppBar(
+          title: const Text('Live Detector: COM643'),
+          leading: IconButton(
+            onPressed: () => _displayTextInputDialog(context), 
+            icon: Icon(Icons.settings)
+          ),
+        ),
         body: SafeArea(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -82,12 +102,40 @@ class _PageState extends State<Page> {
               buildCheetahTextArea(context),
               buildErrorMessage(context),
               buildStartButton(context),
-
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _displayTextInputDialog(BuildContext context) async {
+    return showDialog(
+    context: context,
+    builder: (context) {
+      SettingsProvider provider = context.read();
+      _baseUrlTextFieldController.text = provider.baseUrl;
+
+      return AlertDialog(
+        title: Text('Base URL Settings'),
+        content: TextField(
+          onChanged: (value) {},
+          controller: _baseUrlTextFieldController,
+          decoration: InputDecoration(hintText: "Base URL"),
+        ),
+        actions: <Widget>[
+          MaterialButton(
+            color: Colors.green,
+            textColor: Colors.white,
+            child: Text('OK'),
+            onPressed: () {
+              provider.baseUrl = _baseUrlTextFieldController.text;
+              Navigator.pop(context);
+            },
+          ),
+        ],
+      );
+    });
   }
 
   buildRunningAnalysisCard(BuildContext context) {
@@ -170,13 +218,16 @@ class _PageState extends State<Page> {
           child: Align(
             alignment: Alignment.topLeft,
             child: Consumer<TranscriptionProvider>(
-              builder: (context, provider, child) {
-                return Text(
-                  provider.transcriptText,
-                  textAlign: TextAlign.left,
-                  style: Theme.of(context).textTheme.bodyLarge!.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimary,
-                  ),
+              builder: (context, transcriptionProvider, child) {
+                _transcriptTextFieldController.text = transcriptionProvider.transcriptText;
+
+                return TextField(
+                  controller: _transcriptTextFieldController,
+                  maxLines: null,
+                  style: Theme.of(context).primaryTextTheme.bodyMedium
+                    ?.copyWith(color: Colors.white),
+                  readOnly: true,
+                  //textInputAction: TextInputAction.newline,
                 );
               },
             ),
