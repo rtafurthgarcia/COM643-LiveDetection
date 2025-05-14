@@ -21,3 +21,6 @@ pubspec.lock
 .flutter-plugins
 .flutter-plugins-dependencies
 liveprotector/.vscode/launch.json
+
+chroma_langchain_db/
+.vscode/
