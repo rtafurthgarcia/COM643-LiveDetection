@@ -7,7 +7,7 @@ from langchain_chroma import Chroma
 from csv import DictReader, DictWriter
 from copy import copy
 
-ENDPOINT = "http://127.0.0.1:1234"
+ENDPOINT = "http://127.0.0.1:1234/v1"
 MODELS = ('gemma-3-1b-it-qat', 'qwen3-1.7b', 'deepseek-r1-distill-qwen-1.5b')
 
 embeddings = AzureOpenAIEmbeddings(
@@ -59,30 +59,38 @@ original_calls = DictReader(
     fieldnames=("dialog", "personality", "type", "scam?")
 )
 
-def verify_conversation_real_time(conversation: str, llm: AzureChatOpenAI) -> str:
+def verify_conversation_real_time(conversation: str, with_rag: bool, llm: AzureChatOpenAI) -> str:
     ongoing_conversation = ""
 
-    for conversation_chunk in conversation.split(sep="Callee: | Caller: "):
+    for conversation_chunk in conversation.replace("Callee: ", "\nCallee: ").replace("Caller: ", "\nCaller: ").splitlines()[1:]:
         ongoing_conversation += conversation_chunk
-        retrieved_docs = vector_store.similarity_search(conversation_chunk)
-        docs_content = "\n\n".join(doc.page_content for doc in retrieved_docs)
-        prompt = binary_classification_prompt.invoke({"ongoing_conversation": ongoing_conversation, "context": docs_content})
 
+        context = ''
+        if with_rag:
+            retrieved_docs = vector_store.similarity_search(conversation_chunk)
+            docs_content = "\n\n".join(doc.page_content for doc in retrieved_docs)
+            context = docs_content
+
+        prompt = binary_classification_prompt.invoke({"ongoing_conversation": ongoing_conversation, "context": context})
         answer = llm.invoke(prompt)()
         if (answer == 'FRAUD'):
             return answer
 
     return 'SAFE'
 
-def verify_conversation_real_time_option(conversation: str, llm: AzureChatOpenAI) -> str:
+def verify_conversation_real_time_option(conversation: str, with_rag: bool, llm: AzureChatOpenAI) -> str:
     ongoing_conversation = ""
 
-    for conversation_chunk in conversation.split(sep="Callee: |Caller: "):
+    for conversation_chunk in conversation.replace("Callee: ", "\nCallee:").replace("Caller: ", "\nCaller:").splitlines()[1:]:
         ongoing_conversation += conversation_chunk
-        retrieved_docs = vector_store.similarity_search(conversation_chunk)
-        docs_content = "\n\n".join(doc.page_content for doc in retrieved_docs)
-        prompt = uncertain_option_prompt.invoke({"ongoing_conversation": ongoing_conversation, "context": docs_content})
 
+        context = ''
+        if with_rag:
+            retrieved_docs = vector_store.similarity_search(conversation_chunk)
+            docs_content = "\n\n".join(doc.page_content for doc in retrieved_docs)
+            context = docs_content
+
+        prompt = uncertain_option_prompt.invoke({"ongoing_conversation": ongoing_conversation, "context": context})
         answer = llm.invoke(prompt)()
         if (answer == 'FRAUD'):
             return answer
@@ -93,7 +101,7 @@ def run_analysis_for_model(model_name: str):
     print("Running analysis for model: " + model_name)
 
     llm = AzureChatOpenAI(
-        api_version="v1",
+        api_version="",
         azure_endpoint=ENDPOINT,
         model=model_name,
         api_key="lm_studio"
@@ -110,8 +118,12 @@ def run_analysis_for_model(model_name: str):
 
         print("Analysing call n°" + str(count))
 
-        call["rt"] = verify_conversation_real_time(call['dialog'], llm)
-        call["unc"] = verify_conversation_real_time_option(call['dialog'], llm)
+        call["rt"] = verify_conversation_real_time(call['dialog'], False,  llm)
+        call["unc"] = verify_conversation_real_time_option(call['dialog'], False, llm)
+        call["rag_rt"] = verify_conversation_real_time(call['dialog'], True, llm)
+        call["rag_unc"] = verify_conversation_real_time_option(call['dialog'], True, llm)
+
+        print("Call n° analysed, rt: {}, unc: {}, rag_rt: {}, rag_unc: {}".format(call["rt"], call["unc"], call["rag_rt"], call["rag_unc"]))
 
     with open("results_" + model_name, mode='w', newline='') as file:
         print("Exporting results for model: " + model_name)
